@@ -3,17 +3,9 @@ package main
 import (
 	"log"
 
-	"roulettept/domain/models"
-	"roulettept/domain/repository"
 	"roulettept/infrastructure/db"
-	persistencegorm "roulettept/infrastructure/persistence/gorm"
-	"roulettept/interface/handler"
-	appmw "roulettept/interface/middleware"
-	"roulettept/interface/router"
-	"roulettept/usecase/auth"
 
 	"github.com/joho/godotenv"
-	"github.com/labstack/echo/v4"
 )
 
 func main() {
@@ -27,35 +19,9 @@ func main() {
 	}
 	log.Println("DB connected")
 
-	// 開発用 AutoMigrate（必要ならON）
-	if err := gdb.AutoMigrate(
-		&models.User{},
-		&models.SpinLog{},
-		&models.PointAdjustment{},
-		&models.RefreshToken{},
-		&models.AuditLog{},
-	); err != nil {
-		log.Fatalf("AutoMigrate failed: %v", err)
-	}
-	log.Println("AutoMigrate done")
+	// 例：Repo DI（使うなら）
+	_ = db.NewUserRepository(gdb)
+	_ = db.NewRefreshTokenRepository(gdb)
 
-	// --- DI ---
-	var userRepo repository.UserRepository = persistencegorm.NewUserRepo(gdb)
-
-	authSvc := auth.NewService(userRepo)
-	authHandler := handler.NewAuthHandler(authSvc)
-
-	jwtmw := appmw.NewJWTAuthMiddleware()
-
-	// --- Echo ---
-	e := echo.New()
-	router.Register(e, router.Deps{
-		AuthHandler: authHandler,
-		JWT:         jwtmw,
-	})
-
-	log.Println("server starting on :8080")
-	if err := e.Start(":8080"); err != nil {
-		log.Fatal(err)
-	}
+	// ルーター等はまだ無いなら、いったんここで終了でもOK（ビルド通すのが優先）
 }

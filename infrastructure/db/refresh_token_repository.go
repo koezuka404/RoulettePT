@@ -1,4 +1,4 @@
-package gorm
+package db
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 type refreshTokenRepo struct {
 	db *gorm.DB
 }
+
+var _ repository.RefreshTokenRepository = (*refreshTokenRepo)(nil)
 
 func NewRefreshTokenRepository(db *gorm.DB) repository.RefreshTokenRepository {
 	return &refreshTokenRepo{db: db}
@@ -33,18 +35,32 @@ func (r *refreshTokenRepo) FindByHash(ctx context.Context, hash string) (*models
 	return &rt, nil
 }
 
-// ✅ interfaceに合わせて usedAt を受け取る
-func (r *refreshTokenRepo) MarkUsed(ctx context.Context, id uint64, usedAt time.Time) error {
-	return r.db.WithContext(ctx).
+// used_at を NULL -> usedAt に更新（再利用/競合対策で条件付き）
+func (r *refreshTokenRepo) MarkUsed(ctx context.Context, id int64, usedAt time.Time) error {
+	res := r.db.WithContext(ctx).
 		Model(&models.RefreshToken{}).
 		Where("id = ? AND used_at IS NULL", id).
-		Update("used_at", usedAt).
+		Update("used_at", usedAt)
+
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *refreshTokenRepo) DeleteByUserID(ctx context.Context, userID int64) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&models.RefreshToken{}).
 		Error
 }
 
-func (r *refreshTokenRepo) DeleteByUserID(ctx context.Context, userID uint64) error {
+func (r *refreshTokenRepo) DeleteByHash(ctx context.Context, hash string) error {
 	return r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
+		Where("token_hash = ?", hash).
 		Delete(&models.RefreshToken{}).
 		Error
 }

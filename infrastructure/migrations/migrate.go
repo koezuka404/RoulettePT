@@ -8,20 +8,19 @@ import (
 )
 
 func main() {
-	database, err := db.NewDB()
+	// DB接続
+	gdb, err := db.NewDB()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("db connect failed: %v", err)
 	}
 
-	if err := database.AutoMigrate(
+	// AutoMigrate（まずは User と RefreshToken だけ）
+	if err := gdb.AutoMigrate(
 		&models.User{},
-		&models.SpinLog{},
 		&models.RefreshToken{},
-		&models.PointAdjustment{},
-		&models.AuditLog{},
 	); err != nil {
-		log.Fatal(err)
+		log.Fatalf("migrate failed: %v", err)
 	}
 
-	log.Println("migration success")
+	log.Println("migrate ok")
 }

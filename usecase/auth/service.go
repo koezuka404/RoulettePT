@@ -106,12 +106,9 @@ func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
 		return ErrUserNotFound
 	}
 
-	_, rows, err := s.users.IncrementTokenVersion(ctx, userID)
-	if err != nil {
+	// token_version を +1（全JWT無効化）
+	if err := s.users.IncrementTokenVersion(ctx, userID); err != nil {
 		return err
-	}
-	if rows == 0 {
-		return ErrUserNotFound
 	}
 	return nil
 }
