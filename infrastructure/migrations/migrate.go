@@ -3,7 +3,8 @@ package main
 import (
 	"log"
 
-	"roulettept/domain/models"
+	audit "roulettept/domain/audit/model"
+	user "roulettept/domain/user/model"
 	"roulettept/infrastructure/db"
 )
 
@@ -16,9 +17,9 @@ func main() {
 
 	// AutoMigrate
 	if err := gdb.AutoMigrate(
-		&models.User{},
-		&models.RefreshToken{},
-		&models.AuditLog{},
+		&user.User{},
+		&user.RefreshToken{},
+		&audit.AuditLog{},
 	); err != nil {
 		log.Fatalf("migrate failed: %v", err)
 	}

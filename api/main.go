@@ -5,8 +5,9 @@ import (
 	"os"
 
 	"roulettept/infrastructure/db"
-	"roulettept/interface/controller"
+	gormrepo "roulettept/infrastructure/persistence/gorm"
 	"roulettept/interface/router"
+	usercontroller "roulettept/interface/user/controller"
 	"roulettept/usecase/auth"
 	"roulettept/usecase/useradmin"
 
@@ -23,9 +24,9 @@ func main() {
 		log.Fatalf("DB connection failed: %v", err)
 	}
 
-	userRepo := db.NewUserRepository(gdb)
-	rtRepo := db.NewRefreshTokenRepository(gdb)
-	auditRepo := db.NewAuditLogRepository(gdb)
+	userRepo := gormrepo.NewUserRepository(gdb)
+	rtRepo := gormrepo.NewRefreshTokenRepository(gdb)
+	auditRepo := gormrepo.NewAuditLogRepository(gdb)
 
 	authSvc := auth.NewService(userRepo, rtRepo)
 	adminSvc := useradmin.NewService(userRepo, rtRepo, auditRepo)
@@ -34,8 +35,8 @@ func main() {
 	e.Use(echomw.Logger())
 	e.Use(echomw.Recover())
 
-	authC := controller.NewAuthController(authSvc)
-	adminUserC := controller.NewAdminUserController(adminSvc)
+	authC := usercontroller.NewAuthController(authSvc)
+	adminUserC := usercontroller.NewAdminUserController(adminSvc)
 
 	router.Register(e, authC, adminUserC)
 

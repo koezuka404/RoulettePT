@@ -5,22 +5,23 @@ import (
 	"errors"
 	"time"
 
-	"roulettept/domain/models"
-	"roulettept/domain/repository"
+	auditrepo "roulettept/domain/audit/repository"
+	user "roulettept/domain/user/model"
+	userrepo "roulettept/domain/user/repository"
 
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	users repository.UserRepository
-	rt    repository.RefreshTokenRepository
-	audit repository.AuditLogRepository
+	users userrepo.UserRepository
+	rt    userrepo.RefreshTokenRepository
+	audit auditrepo.AuditLogRepository
 }
 
 func NewService(
-	users repository.UserRepository,
-	rt repository.RefreshTokenRepository,
-	audit repository.AuditLogRepository,
+	users userrepo.UserRepository,
+	rt userrepo.RefreshTokenRepository,
+	audit auditrepo.AuditLogRepository,
 ) *Service {
 	return &Service{
 		users: users,
@@ -33,7 +34,7 @@ func NewService(
 type ListInput struct {
 	Page     int
 	Limit    int
-	Role     *models.UserRole
+	Role     *user.UserRole
 	IsActive *bool
 	Q        string
 }
@@ -47,30 +48,30 @@ type ListOutput struct {
 }
 
 type UserSummary struct {
-	ID           int64           `json:"id"`
-	Email        string          `json:"email"`
-	Role         models.UserRole `json:"role"`
-	TokenVersion int64           `json:"token_version"`
-	PointBalance int64           `json:"point_balance"`
-	IsActive     bool            `json:"is_active"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID           int64         `json:"id"`
+	Email        string        `json:"email"`
+	Role         user.UserRole `json:"role"`
+	TokenVersion int64         `json:"token_version"`
+	PointBalance int64         `json:"point_balance"`
+	IsActive     bool          `json:"is_active"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 func (s *Service) ListUsers(ctx context.Context, in ListInput) (ListOutput, error) {
-	f := repository.UserListFilter{
+	f := userrepo.UserListFilter{
 		Role:     in.Role,
 		IsActive: in.IsActive,
 		Q:        in.Q,
 	}
 
-	users, total, err := s.users.List(ctx, in.Page, in.Limit, f)
+	usersList, total, err := s.users.List(ctx, in.Page, in.Limit, f)
 	if err != nil {
 		return ListOutput{}, err
 	}
 
-	out := make([]UserSummary, 0, len(users))
-	for _, u := range users {
+	out := make([]UserSummary, 0, len(usersList))
+	for _, u := range usersList {
 		out = append(out, UserSummary{
 			ID:           u.ID,
 			Email:        u.Email,
@@ -100,7 +101,7 @@ func (s *Service) ListUsers(ctx context.Context, in ListInput) (ListOutput, erro
 	}, nil
 }
 
-func (s *Service) UpdateRole(ctx context.Context, actorID, targetID int64, role models.UserRole) error {
+func (s *Service) UpdateRole(ctx context.Context, actorID, targetID int64, role user.UserRole) error {
 	if targetID == 0 {
 		return ErrNotFound
 	}
@@ -178,7 +179,7 @@ func (s *Service) ForceLogout(ctx context.Context, actorID, targetID int64) erro
 		return err
 	}
 
-	// refresh token も全削除（インターフェースにある想定）
+	// refresh token も全削除
 	_ = s.rt.DeleteByUserID(ctx, targetID)
 
 	return nil

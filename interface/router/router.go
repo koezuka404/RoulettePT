@@ -1,13 +1,13 @@
 package router
 
 import (
-	"roulettept/interface/controller"
 	"roulettept/interface/middleware"
+	usercontroller "roulettept/interface/user/controller"
 
 	"github.com/labstack/echo/v4"
 )
 
-func Register(e *echo.Echo, authC *controller.AuthController, adminC *controller.AdminUserController) {
+func Register(e *echo.Echo, authC *usercontroller.AuthController, adminC *usercontroller.AdminUserController) {
 	v1 := e.Group("/api/v1")
 
 	// auth

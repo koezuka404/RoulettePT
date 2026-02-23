@@ -6,22 +6,22 @@ import (
 	"strings"
 	"time"
 
-	"roulettept/domain/models"
-	"roulettept/domain/repository"
+	user "roulettept/domain/user/model"
+	userrepo "roulettept/domain/user/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	users repository.UserRepository
-	rt    repository.RefreshTokenRepository
+	users userrepo.UserRepository
+	rt    userrepo.RefreshTokenRepository
 
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
 
-func NewService(users repository.UserRepository, rt repository.RefreshTokenRepository) *Service {
+func NewService(users userrepo.UserRepository, rt userrepo.RefreshTokenRepository) *Service {
 	return &Service{
 		users:      users,
 		rt:         rt,
@@ -44,10 +44,10 @@ func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 		return err
 	}
 
-	u := &models.User{
+	u := &user.User{
 		Email:        in.Email,
 		PasswordHash: string(hash),
-		Role:         models.RoleUser,
+		Role:         user.RoleUser,
 		TokenVersion: 0,
 		PointBalance: 0,
 		IsActive:     true,
@@ -83,7 +83,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginOutput, error)
 	refreshHash := sha256Hex(refreshPlain)
 
 	now := time.Now()
-	if err := s.rt.Create(ctx, &models.RefreshToken{
+	if err := s.rt.Create(ctx, &user.RefreshToken{
 		UserID:    u.ID,
 		TokenHash: refreshHash,
 		ExpiresAt: now.Add(s.refreshTTL),
@@ -155,7 +155,7 @@ func (s *Service) Refresh(ctx context.Context, in RefreshInput) (RefreshOutput, 
 	}
 	newHash := sha256Hex(newPlain)
 
-	if err := s.rt.Create(ctx, &models.RefreshToken{
+	if err := s.rt.Create(ctx, &user.RefreshToken{
 		UserID:    rt.UserID,
 		TokenHash: newHash,
 		ExpiresAt: now.Add(s.refreshTTL),
@@ -203,11 +203,10 @@ func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
 		return ErrUserNotFound
 	}
 
-	// IncrementTokenVersion は error だけ返す想定
 	return s.users.IncrementTokenVersion(ctx, userID)
 }
 
-func (s *Service) issueAccessToken(u *models.User) (string, error) {
+func (s *Service) issueAccessToken(u *user.User) (string, error) {
 	secret := os.Getenv("SECRET")
 	if secret == "" {
 		return "", ErrSecretNotSet
@@ -224,41 +223,4 @@ func (s *Service) issueAccessToken(u *models.User) (string, error) {
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return t.SignedString([]byte(secret))
-}
-
-// expは無視してtvだけ読みたい（refresh用）
-func readTVIgnoringExp(accessToken string) (int64, bool) {
-	accessToken = strings.TrimSpace(accessToken)
-	if accessToken == "" {
-		return 0, false
-	}
-
-	secret := os.Getenv("SECRET")
-	if secret == "" {
-		return 0, false
-	}
-
-	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
-	claims := jwt.MapClaims{}
-	_, err := parser.ParseWithClaims(accessToken, claims, func(t *jwt.Token) (any, error) {
-		return []byte(secret), nil
-	})
-	if err != nil {
-		return 0, false
-	}
-
-	v, ok := claims["tv"]
-	if !ok {
-		return 0, false
-	}
-	switch x := v.(type) {
-	case float64:
-		return int64(x), true
-	case int64:
-		return x, true
-	case int:
-		return int64(x), true
-	default:
-		return 0, false
-	}
 }

@@ -1,11 +1,11 @@
-package controller
+package usercontroller
 
 import (
 	"net/http"
 	"strconv"
 	"strings"
 
-	"roulettept/domain/models"
+	user "roulettept/domain/user/model"
 	"roulettept/usecase/useradmin"
 
 	"github.com/labstack/echo/v4"
@@ -23,9 +23,9 @@ func (h *AdminUserController) ListUsers(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 
-	var role *models.UserRole
+	var role *user.UserRole
 	if r := strings.TrimSpace(c.QueryParam("role")); r != "" {
-		rr := models.UserRole(r)
+		rr := user.UserRole(r)
 		role = &rr
 	}
 
@@ -63,7 +63,7 @@ func (h *AdminUserController) UpdateRole(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errResp("VALIDATION_ERROR", "invalid body"))
 	}
 
-	role := models.UserRole(strings.TrimSpace(req.Role))
+	role := user.UserRole(strings.TrimSpace(req.Role))
 
 	err := h.uc.UpdateRole(c.Request().Context(), actorID, targetID, role)
 	switch err {
