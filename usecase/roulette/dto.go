@@ -18,8 +18,10 @@ type HistoryInput struct {
 }
 
 type HistoryItem struct {
-	Points int    `json:"points"`
-	Time   string `json:"time"`
+	ID             int64  `json:"id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	PointsEarned   int    `json:"points_earned"`
+	CreatedAt      string `json:"created_at"`
 }
 
 type HistoryOutput struct {

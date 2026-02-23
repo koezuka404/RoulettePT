@@ -97,8 +97,10 @@ func (h *Handler) History(c echo.Context) error {
 	items := make([]dto.SpinHistoryItem, 0, len(out.Items))
 	for _, v := range out.Items {
 		items = append(items, dto.SpinHistoryItem{
-			PointsEarned: int64(v.Points),
-			CreatedAt:    v.Time, // usecase側で RFC3339 string にしてる
+			ID:             v.ID,
+			IdempotencyKey: v.IdempotencyKey,
+			PointsEarned:   int64(v.PointsEarned), // ←ここだけ変更
+			CreatedAt:      v.CreatedAt,
 		})
 	}
 

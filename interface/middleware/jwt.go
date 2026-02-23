@@ -9,9 +9,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Logout で user_id を Context に入れる最小版
+// JWTMiddleware
+// Context に入れる値:
+//
+//	c.Set("user_id", int64)
+//	c.Set("role", string)
 func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+
 		tokenStr := bearer(c.Request().Header.Get("Authorization"))
 		if tokenStr == "" {
 			return c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "missing token"))
@@ -23,24 +28,44 @@ func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		claims := jwt.MapClaims{}
-		t, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			// ✅ v5では Alg() で比較するのが安全
+
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 			if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return []byte(secret), nil
 		})
-		if err != nil || !t.Valid {
+		if err != nil || !token.Valid {
 			return c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "invalid token"))
 		}
 
-		sub, _ := claims["sub"].(string)
+		// ======================
+		// user_id 取得
+		// ======================
+		sub, ok := claims["sub"].(string)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "invalid sub"))
+		}
+
 		uid, ok := parseInt64(sub)
 		if !ok {
 			return c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "invalid sub"))
 		}
 
+		// ======================
+		// role 取得（任意）
+		// ======================
+		role := ""
+		if r, ok := claims["role"].(string); ok {
+			role = strings.ToUpper(r)
+		}
+
+		// ======================
+		// Context に格納
+		// ======================
 		c.Set("user_id", uid)
+		c.Set("role", role)
+
 		return next(c)
 	}
 }

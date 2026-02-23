@@ -11,8 +11,11 @@ import (
 	"roulettept/infrastructure/db"
 	gormrepo "roulettept/infrastructure/persistence/gorm"
 
+	pointsController "roulettept/interface/points/controller"
 	rouletteController "roulettept/interface/roulette/controller"
 	rouletteRouter "roulettept/interface/router"
+
+	"roulettept/usecase/points"
 	"roulettept/usecase/roulette"
 
 	"github.com/joho/godotenv"
@@ -28,17 +31,36 @@ func main() {
 		log.Fatalf("db connection failed: %v", err)
 	}
 
+	// =========================
 	// DI（Roulette）
+	// =========================
 	rouletteRepo := gormrepo.NewRouletteRepository(gdb)
-
 	rouletteUC := roulette.New(rouletteRepo, rouletteRepo)
 	rouletteHandler := rouletteController.New(rouletteUC)
 
+	// =========================
+	// DI（Points）
+	// =========================
+	userRepo := gormrepo.NewUserRepository(gdb)
+	pointAdjRepo := gormrepo.NewPointAdjustmentRepository(gdb)
+
+	pointsSvc := points.NewService(userRepo, pointAdjRepo, nil) // audit未実装なら nil OK
+
+	pointsHandler := pointsController.NewPointsController(pointsSvc)
+	adminPointsHandler := pointsController.NewAdminPointsController(pointsSvc)
+
+	// =========================
+	// Dependencies
+	// =========================
 	deps := rouletteRouter.Dependencies{
-		Roulette: rouletteHandler,
+		Roulette:    rouletteHandler,
+		Points:      pointsHandler,
+		AdminPoints: adminPointsHandler,
 	}
 
+	// =========================
 	// Echo
+	// =========================
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(echoMiddleware.Recover())
@@ -60,10 +82,14 @@ func main() {
 
 	api := e.Group("/api/v1")
 
-	// Roulette router（router内で /roulette + JWT を付与）
+	// Router 登録（router内で prefix + JWT を付与）
 	rouletteRouter.RegisterRoulette(api, deps)
+	rouletteRouter.RegisterPointsRoutes(api, pointsHandler, adminPointsHandler)
+	rouletteRouter.RegisterPointsRoutes(api, pointsHandler, adminPointsHandler)
 
+	// =========================
 	// Start / Shutdown
+	// =========================
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

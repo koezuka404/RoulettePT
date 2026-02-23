@@ -16,4 +16,5 @@ type SpinLogRepository interface {
 // UserPointRepository: ポイント加算（roulette用途）
 type UserPointRepository interface {
 	AddPoints(ctx context.Context, userID int64, delta int) (newBalance int64, err error)
+	GetBalance(ctx context.Context, userID int64) (balance int64, err error)
 }

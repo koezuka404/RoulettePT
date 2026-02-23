@@ -102,4 +102,18 @@ func (r *rouletteRepository) AddPoints(ctx context.Context, userID int64, delta 
 	}
 
 	return newBalance, nil
+
+}
+
+func (r *rouletteRepository) GetBalance(ctx context.Context, userID int64) (int64, error) {
+	var balance int64
+	err := r.db.WithContext(ctx).
+		Table("users").
+		Select("point_balance").
+		Where("id = ?", userID).
+		Scan(&balance).Error
+	if err != nil {
+		return 0, err
+	}
+	return balance, nil
 }

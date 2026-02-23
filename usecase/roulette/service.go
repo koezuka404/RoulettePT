@@ -37,8 +37,13 @@ func (s *Service) Spin(ctx context.Context, in SpinInput) (*SpinOutput, error) {
 	// idempotency確認
 	existing, _ := s.logRepo.FindByKey(ctx, in.UserID, in.IdempotencyKey)
 	if existing != nil {
+		bal, err := s.userRepo.GetBalance(ctx, in.UserID)
+		if err != nil {
+			return nil, err
+		}
 		return &SpinOutput{
 			Points:      existing.PointsEarned,
+			NewBalance:  bal,
 			IsDuplicate: true,
 		}, nil
 	}
@@ -96,8 +101,10 @@ func (s *Service) History(ctx context.Context, in HistoryInput) (*HistoryOutput,
 
 	for _, l := range logs {
 		items = append(items, HistoryItem{
-			Points: l.PointsEarned,
-			Time:   l.CreatedAt.Format(time.RFC3339),
+			ID:             l.ID,
+			IdempotencyKey: l.IdempotencyKey,
+			PointsEarned:   l.PointsEarned,
+			CreatedAt:      l.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
