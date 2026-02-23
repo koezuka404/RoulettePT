@@ -2,8 +2,8 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"roulettept/domain/models"
@@ -13,23 +13,20 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	ErrEmailAlreadyUsed   = errors.New("email already used")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrUserInactive       = errors.New("user is inactive")
-	ErrSecretNotSet       = errors.New("SECRET is not set")
-)
-
 type Service struct {
 	users repository.UserRepository
-	ttl   time.Duration
+	rt    repository.RefreshTokenRepository
+
+	accessTTL  time.Duration
+	refreshTTL time.Duration
 }
 
-func NewService(users repository.UserRepository) *Service {
+func NewService(users repository.UserRepository, rt repository.RefreshTokenRepository) *Service {
 	return &Service{
-		users: users,
-		ttl:   12 * time.Hour,
+		users:      users,
+		rt:         rt,
+		accessTTL:  15 * time.Minute,
+		refreshTTL: 14 * 24 * time.Hour,
 	}
 }
 
@@ -55,46 +52,146 @@ func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 		PointBalance: 0,
 		IsActive:     true,
 	}
-
 	return s.users.Create(ctx, u)
 }
 
-func (s *Service) Login(ctx context.Context, in LoginInput) (AuthOutput, error) {
+func (s *Service) Login(ctx context.Context, in LoginInput) (LoginOutput, error) {
 	u, err := s.users.FindByEmail(ctx, in.Email)
 	if err != nil {
-		return AuthOutput{}, err
+		return LoginOutput{}, err
 	}
 	if u == nil {
-		return AuthOutput{}, ErrInvalidCredentials
+		return LoginOutput{}, ErrInvalidCredentials
 	}
 	if !u.IsActive {
-		return AuthOutput{}, ErrUserInactive
+		return LoginOutput{}, ErrUserInactive
 	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Password)); err != nil {
-		return AuthOutput{}, ErrInvalidCredentials
+		return LoginOutput{}, ErrInvalidCredentials
 	}
 
-	secret := os.Getenv("SECRET")
-	if secret == "" {
-		return AuthOutput{}, ErrSecretNotSet
+	access, err := s.issueAccessToken(u)
+	if err != nil {
+		return LoginOutput{}, err
+	}
+
+	// refresh token（平文cookie、DBにはhashのみ）
+	refreshPlain, err := randomTokenHex(32)
+	if err != nil {
+		return LoginOutput{}, err
+	}
+	refreshHash := sha256Hex(refreshPlain)
+
+	now := time.Now()
+	if err := s.rt.Create(ctx, &models.RefreshToken{
+		UserID:    u.ID,
+		TokenHash: refreshHash,
+		ExpiresAt: now.Add(s.refreshTTL),
+		UsedAt:    nil,
+		UserAgent: in.UserAgent,
+		IP:        in.IP,
+		CreatedAt: now,
+	}); err != nil {
+		return LoginOutput{}, err
+	}
+
+	csrf, err := randomTokenHex(32)
+	if err != nil {
+		return LoginOutput{}, err
+	}
+
+	return LoginOutput{
+		AccessToken:  access,
+		RefreshToken: refreshPlain,
+		CSRFToken:    csrf,
+	}, nil
+}
+
+func (s *Service) Refresh(ctx context.Context, in RefreshInput) (RefreshOutput, error) {
+	if strings.TrimSpace(in.RefreshToken) == "" {
+		return RefreshOutput{}, ErrRefreshTokenInvalid
+	}
+
+	hash := sha256Hex(in.RefreshToken)
+
+	rt, err := s.rt.FindByHash(ctx, hash)
+	if err != nil || rt == nil {
+		return RefreshOutput{}, ErrRefreshTokenInvalid
 	}
 
 	now := time.Now()
-	claims := jwt.MapClaims{
-		"user_id":       u.ID,
-		"token_version": u.TokenVersion,
-		"exp":           now.Add(s.ttl).Unix(),
-		"iat":           now.Unix(),
+	if now.After(rt.ExpiresAt) {
+		_ = s.rt.DeleteByHash(ctx, hash)
+		return RefreshOutput{}, ErrRefreshTokenInvalid
 	}
 
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	token, err := t.SignedString([]byte(secret))
+	if rt.UsedAt != nil {
+		_ = s.rt.DeleteByUserID(ctx, rt.UserID)
+		return RefreshOutput{}, ErrRefreshTokenReused
+	}
+
+	u, err := s.users.FindByID(ctx, rt.UserID)
+	if err != nil || u == nil {
+		return RefreshOutput{}, ErrRefreshTokenInvalid
+	}
+	if !u.IsActive {
+		return RefreshOutput{}, ErrUserInactive
+	}
+
+	tv, ok := readTVIgnoringExp(in.AccessToken)
+	if !ok || tv != u.TokenVersion {
+		return RefreshOutput{}, ErrTokenVersionMismatch
+	}
+
+	// old を used に（二重実行はここで弾く）
+	if err := s.rt.MarkUsed(ctx, rt.ID, now); err != nil {
+		_ = s.rt.DeleteByUserID(ctx, rt.UserID)
+		return RefreshOutput{}, ErrRefreshTokenReused
+	}
+
+	newPlain, err := randomTokenHex(32)
 	if err != nil {
-		return AuthOutput{}, err
+		return RefreshOutput{}, err
+	}
+	newHash := sha256Hex(newPlain)
+
+	if err := s.rt.Create(ctx, &models.RefreshToken{
+		UserID:    rt.UserID,
+		TokenHash: newHash,
+		ExpiresAt: now.Add(s.refreshTTL),
+		UsedAt:    nil,
+		UserAgent: in.UserAgent,
+		IP:        in.IP,
+		CreatedAt: now,
+	}); err != nil {
+		return RefreshOutput{}, err
 	}
 
-	return AuthOutput{AccessToken: token}, nil
+	access, err := s.issueAccessToken(u)
+	if err != nil {
+		return RefreshOutput{}, err
+	}
+	csrf, err := randomTokenHex(32)
+	if err != nil {
+		return RefreshOutput{}, err
+	}
+
+	return RefreshOutput{
+		AccessToken:  access,
+		RefreshToken: newPlain,
+		CSRFToken:    csrf,
+	}, nil
+}
+
+func (s *Service) Logout(ctx context.Context, in LogoutInput) error {
+	if in.UserID == 0 {
+		return ErrUserNotFound
+	}
+	if strings.TrimSpace(in.RefreshToken) == "" {
+		return nil
+	}
+	hash := sha256Hex(in.RefreshToken)
+	return s.rt.DeleteByHash(ctx, hash)
 }
 
 func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
@@ -106,9 +203,62 @@ func (s *Service) LogoutAll(ctx context.Context, userID int64) error {
 		return ErrUserNotFound
 	}
 
-	// token_version を +1（全JWT無効化）
-	if err := s.users.IncrementTokenVersion(ctx, userID); err != nil {
-		return err
+	// IncrementTokenVersion は error だけ返す想定
+	return s.users.IncrementTokenVersion(ctx, userID)
+}
+
+func (s *Service) issueAccessToken(u *models.User) (string, error) {
+	secret := os.Getenv("SECRET")
+	if secret == "" {
+		return "", ErrSecretNotSet
 	}
-	return nil
+
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub":  itoa(u.ID),
+		"role": string(u.Role),
+		"tv":   u.TokenVersion,
+		"iat":  now.Unix(),
+		"exp":  now.Add(s.accessTTL).Unix(),
+	}
+
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return t.SignedString([]byte(secret))
+}
+
+// expは無視してtvだけ読みたい（refresh用）
+func readTVIgnoringExp(accessToken string) (int64, bool) {
+	accessToken = strings.TrimSpace(accessToken)
+	if accessToken == "" {
+		return 0, false
+	}
+
+	secret := os.Getenv("SECRET")
+	if secret == "" {
+		return 0, false
+	}
+
+	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	claims := jwt.MapClaims{}
+	_, err := parser.ParseWithClaims(accessToken, claims, func(t *jwt.Token) (any, error) {
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return 0, false
+	}
+
+	v, ok := claims["tv"]
+	if !ok {
+		return 0, false
+	}
+	switch x := v.(type) {
+	case float64:
+		return int64(x), true
+	case int64:
+		return x, true
+	case int:
+		return int64(x), true
+	default:
+		return 0, false
+	}
 }

@@ -14,10 +14,11 @@ func main() {
 		log.Fatalf("db connect failed: %v", err)
 	}
 
-	// AutoMigrate（まずは User と RefreshToken だけ）
+	// AutoMigrate
 	if err := gdb.AutoMigrate(
 		&models.User{},
 		&models.RefreshToken{},
+		&models.AuditLog{},
 	); err != nil {
 		log.Fatalf("migrate failed: %v", err)
 	}
