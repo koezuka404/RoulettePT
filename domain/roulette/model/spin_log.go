@@ -1,13 +1,15 @@
-package roulette
+package model
 
 import "time"
 
 type SpinLog struct {
-	ID             int64     `gorm:"primaryKey;autoIncrement;column:id"`
-	UserID         int64     `gorm:"not null;index:idx_spin_logs_user_created,priority:1;uniqueIndex:uq_spin_logs_user_idem,priority:1;column:user_id"`
-	IdempotencyKey string    `gorm:"not null;uniqueIndex:uq_spin_logs_user_idem,priority:2;column:idempotency_key"`
-	PointsEarned   int       `gorm:"not null;column:points_earned"`
-	CreatedAt      time.Time `gorm:"not null;index:idx_spin_logs_user_created,priority:2;autoCreateTime;column:created_at"`
+	ID             int64     `gorm:"primaryKey;autoIncrement"`
+	UserID         int64     `gorm:"not null;uniqueIndex:uid_key"`
+	IdempotencyKey string    `gorm:"type:varchar(128);not null;uniqueIndex:uid_key"`
+	PointsEarned   int       `gorm:"not null"`
+	CreatedAt      time.Time `gorm:"not null"`
 }
 
-func (SpinLog) TableName() string { return "spin_logs" }
+func (SpinLog) TableName() string {
+	return "spin_logs"
+}

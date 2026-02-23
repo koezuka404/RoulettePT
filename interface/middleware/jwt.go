@@ -24,7 +24,8 @@ func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		claims := jwt.MapClaims{}
 		t, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			if t.Method != jwt.SigningMethodHS256 {
+			// ✅ v5では Alg() で比較するのが安全
+			if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return []byte(secret), nil
