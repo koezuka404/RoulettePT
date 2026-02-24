@@ -3,7 +3,6 @@ package controller
 import (
 	"net/http"
 
-	"backend/middleware"
 	usecase "backend/usecase"
 
 	"github.com/labstack/echo/v4"
@@ -22,22 +21,20 @@ func NewRouletteController(ru usecase.IRouletteUsecase) IRouletteController {
 }
 
 type SpinRequest struct {
+	UserID         uint   `json:"user_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
 func (rc *rouletteController) Spin(c echo.Context) error {
-	userIDVal := c.Get(middleware.UserIDKey)
-	userID, ok := userIDVal.(uint)
-	if !ok || userID == 0 {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-	}
-
 	var req SpinRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid body"})
 	}
+	if req.UserID == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+	}
 
-	spinLog, err := rc.ru.Spin(userID, req.IdempotencyKey)
+	spinLog, err := rc.ru.Spin(req.UserID, req.IdempotencyKey)
 	if err != nil {
 		switch err {
 		case usecase.ErrIdempotencyKeyRequired:

@@ -24,6 +24,9 @@ func main() {
 	if err := db.AutoMigrate(&model.SpinLog{}); err != nil {
 		log.Fatalf("spin_log migrate failed: %v", err)
 	}
+	if err := db.AutoMigrate(&model.PointAdjustment{}); err != nil {
+		log.Fatalf("point_adjustment migrate failed: %v", err)
+	}
 
 	//userRepositoryインスタンス化
 	userRepository := repository.NewUserRepository(db)
@@ -40,6 +43,11 @@ func main() {
 	rouletteUsecase := usecase.NewRouletteUsecase(userRepoForRoulette, spinLogRepository)
 	rouletteController := controller.NewRouletteController(rouletteUsecase)
 	router.RegisterRoulette(e, rouletteController)
+	pointAdjustmentRepository := repository.NewPointAdjustmentRepository(db)
+	pointsUsecase := usecase.NewPointsUsecase(userRepoForRoulette, pointAdjustmentRepository)
+	pointsController := controller.NewPointsController(pointsUsecase)
+	adminPointsController := controller.NewAdminPointsController(pointsUsecase)
+	router.RegisterPoints(e, pointsController, adminPointsController)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
