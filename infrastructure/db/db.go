@@ -20,7 +20,10 @@ func NewDB() (*gorm.DB, error) {
 		return nil, fmt.Errorf("DB_DSN is empty")
 	}
 
+	fmt.Println("NewDB called, DB_DSN len =", len(dsn))
+
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
+
 }

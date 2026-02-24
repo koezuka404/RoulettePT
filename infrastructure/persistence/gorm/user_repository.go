@@ -4,101 +4,118 @@ import (
 	"context"
 	"errors"
 
-	"roulettept/domain/models"
+	user "roulettept/domain/user/model"
+	userrepo "roulettept/domain/user/repository"
 
 	"gorm.io/gorm"
 )
 
-type UserRepo struct {
+type userRepo struct {
 	db *gorm.DB
 }
 
-func NewUserRepo(db *gorm.DB) *UserRepo {
-	return &UserRepo{db: db}
+func NewUserRepository(db *gorm.DB) userrepo.UserRepository {
+	return &userRepo{db: db}
 }
 
-func (r *UserRepo) Create(ctx context.Context, u *models.User) error {
+func (r *userRepo) Create(ctx context.Context, u *user.User) error {
 	return r.db.WithContext(ctx).Create(u).Error
 }
 
-func (r *UserRepo) FindByID(ctx context.Context, id int64) (*models.User, error) {
-	var u models.User
+func (r *userRepo) FindByID(ctx context.Context, id int64) (*user.User, error) {
+	var u user.User
 	err := r.db.WithContext(ctx).First(&u, id).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &u, nil
 }
 
-func (r *UserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
-	var u models.User
+func (r *userRepo) FindByEmail(ctx context.Context, email string) (*user.User, error) {
+	var u user.User
 	err := r.db.WithContext(ctx).Where("email = ?", email).First(&u).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &u, nil
 }
 
-func (r *UserRepo) UpdateRole(ctx context.Context, id int64, role models.Role) (int64, error) {
-	res := r.db.WithContext(ctx).
-		Model(&models.User{}).
-		Where("id = ?", id).
-		Update("role", role)
-	return res.RowsAffected, res.Error
+func (r *userRepo) IncrementTokenVersion(ctx context.Context, userID int64) error {
+	return r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Update("token_version", gorm.Expr("token_version + 1")).Error
 }
 
-func (r *UserRepo) Deactivate(ctx context.Context, id int64) (int64, error) {
+func (r *userRepo) AddPointsWithVersion(ctx context.Context, userID int64, expectedVersion int64, delta int64) (bool, error) {
 	res := r.db.WithContext(ctx).
-		Model(&models.User{}).
-		Where("id = ?", id).
-		Update("is_active", false)
-	return res.RowsAffected, res.Error
-}
-
-func (r *UserRepo) AddPoints(ctx context.Context, id int64, delta int) (int, int64, error) {
-	// point_balance = point_balance + delta（原子的）
-	res := r.db.WithContext(ctx).
-		Model(&models.User{}).
-		Where("id = ?", id).
-		UpdateColumn("point_balance", gorm.Expr("point_balance + ?", delta))
+		Model(&user.User{}).
+		Where("id = ? AND version = ?", userID, expectedVersion).
+		Updates(map[string]any{
+			"point_balance": gorm.Expr("point_balance + ?", delta),
+			"version":       gorm.Expr("version + 1"),
+		})
 	if res.Error != nil {
-		return 0, 0, res.Error
+		return false, res.Error
 	}
-	if res.RowsAffected == 0 {
-		return 0, 0, nil
-	}
-
-	// 最新残高（最速優先で再取得）
-	var u models.User
-	if err := r.db.WithContext(ctx).Select("point_balance").First(&u, id).Error; err != nil {
-		return 0, 0, err
-	}
-	return u.PointBalance, res.RowsAffected, nil
+	return res.RowsAffected == 1, nil
 }
 
-func (r *UserRepo) IncrementTokenVersion(ctx context.Context, id int64) (int, int64, error) {
-	// token_version = token_version + 1（原子的）
-	res := r.db.WithContext(ctx).
-		Model(&models.User{}).
-		Where("id = ?", id).
-		UpdateColumn("token_version", gorm.Expr("token_version + 1"))
-	if res.Error != nil {
-		return 0, 0, res.Error
+// ------- admin -------
+
+func (r *userRepo) List(ctx context.Context, page, limit int, f userrepo.UserListFilter) ([]user.User, int64, error) {
+	if page <= 0 {
+		page = 1
 	}
-	if res.RowsAffected == 0 {
-		return 0, 0, nil
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := (page - 1) * limit
+
+	q := r.db.WithContext(ctx).Model(&user.User{})
+
+	if f.Role != nil {
+		q = q.Where("role = ?", string(*f.Role))
+	}
+	if f.IsActive != nil {
+		q = q.Where("is_active = ?", *f.IsActive)
+	}
+	if f.Q != "" {
+		q = q.Where("email ILIKE ?", f.Q+"%") // 仕様: 前方一致
 	}
 
-	// 最速優先で再取得
-	var u models.User
-	if err := r.db.WithContext(ctx).Select("token_version").First(&u, id).Error; err != nil {
-		return 0, 0, err
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	return u.TokenVersion, res.RowsAffected, nil
+
+	var items []user.User
+	if err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
+}
+
+func (r *userRepo) UpdateRole(ctx context.Context, userID int64, role user.UserRole) error {
+	return r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Update("role", string(role)).Error
+}
+
+func (r *userRepo) Deactivate(ctx context.Context, userID int64) error {
+	return r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Update("is_active", false).Error
 }

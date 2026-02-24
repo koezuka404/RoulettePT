@@ -3,25 +3,26 @@ package main
 import (
 	"log"
 
-	"roulettept/domain/models"
+	audit "roulettept/domain/audit/model"
+	user "roulettept/domain/user/model"
 	"roulettept/infrastructure/db"
 )
 
 func main() {
-	database, err := db.NewDB()
+	// DB接続
+	gdb, err := db.NewDB()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("db connect failed: %v", err)
 	}
 
-	if err := database.AutoMigrate(
-		&models.User{},
-		&models.SpinLog{},
-		&models.RefreshToken{},
-		&models.PointAdjustment{},
-		&models.AuditLog{},
+	// AutoMigrate
+	if err := gdb.AutoMigrate(
+		&user.User{},
+		&user.RefreshToken{},
+		&audit.AuditLog{},
 	); err != nil {
-		log.Fatal(err)
+		log.Fatalf("migrate failed: %v", err)
 	}
 
-	log.Println("migration success")
+	log.Println("migrate ok")
 }
