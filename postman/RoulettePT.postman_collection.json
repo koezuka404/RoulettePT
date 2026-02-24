@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "roulettept-collection",
+    "name": "RoulettePT Spec Tests (Only)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth (13 / 19.2-19.4)",
+      "item": [
+        {
+          "name": "Register USER (13.1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register ADMIN (13.1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login USER (A1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.access_token) pm.environment.set('access_token_user', json.data.access_token);",
+                  "if (json?.data?.csrf_token) pm.environment.set('csrf_token_user', json.data.csrf_token);",
+                  "// 仕様書: refresh_token(HttpOnly) と csrf_token Cookie が返る想定（csrf はJSから読める）",
+                  "// Cookie自体はPostmanが保持。csrfはレスポンスbodyに含めている実装ならここで拾える。"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login USER wrong password (A2)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"WRONG_PASSWORD_123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login non-existing email (A3)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"no-such-user@test.com\",\n  \"password\": \"WRONG_PASSWORD_123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login ADMIN (A1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.access_token) pm.environment.set('access_token_admin', json.data.access_token);",
+                  "if (json?.data?.csrf_token) pm.environment.set('csrf_token_admin', json.data.csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh USER (R1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-CSRF-Token", "value": "{{csrf_token_user}}" },
+              { "key": "Origin", "value": "{{origin}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Refresh USER missing CSRF header (R6)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Origin", "value": "{{origin}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Refresh USER invalid Origin (R7)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-CSRF-Token", "value": "{{csrf_token_user}}" },
+              { "key": "Origin", "value": "https://evil.example" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout USER (L1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_user}}" },
+              { "key": "X-CSRF-Token", "value": "{{csrf_token_user}}" },
+              { "key": "Origin", "value": "{{origin}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Logout USER missing CSRF header (L3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_user}}" },
+              { "key": "Origin", "value": "{{origin}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spin (14 / 19.5)",
+      "item": [
+        {
+          "name": "Spin normal (SP1-SP4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_user}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/spin",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "spin"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"{{idempotency_key}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Spin duplicate idempotency (SP5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_user}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/spin",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "spin"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotency_key\": \"{{idempotency_key}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Spin missing idempotency_key (SP10)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_user}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/spin",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "spin"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        },
+        {
+          "name": "Spin history (14.2)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token_user}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/spin/history?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "spin", "history"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Points (15 / 19.6)",
+      "item": [
+        {
+          "name": "Get my balance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token_user}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/points/balance",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "points", "balance"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (16 / 19.4,19.6)",
+      "item": [
+        {
+          "name": "Force logout target user (F1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token_admin}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/admin/users/{{target_user_id}}/force-logout",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "admin", "users", "{{target_user_id}}", "force-logout"]
+            }
+          }
+        },
+        {
+          "name": "Force logout by USER should fail (F4)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token_user}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/admin/users/{{target_user_id}}/force-logout",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "admin", "users", "{{target_user_id}}", "force-logout"]
+            }
+          }
+        },
+        {
+          "name": "Admin adjust points +100 (PT1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_admin}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/admin/points/adjust",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "admin", "points", "adjust"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": {{target_user_id}},\n  \"delta\": 100,\n  \"reason\": \"campaign\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Admin adjust points missing reason (PT4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token_admin}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/admin/points/adjust",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "admin", "points", "adjust"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": {{target_user_id}},\n  \"delta\": 100\n}"
+            }
+          }
+        },
+        {
+          "name": "Admin users list (16.3)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token_admin}}" }],
+            "url": {
+              "raw": "{{base_url}}{{api_v1}}/admin/users?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_v1}}", "admin", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

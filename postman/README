@@ -1,0 +1,23 @@
+# RoulettePT Spec Tests (Only)
+
+## Import
+- Postman > Import
+  - RoulettePT.local.postman_environment.json
+  - RoulettePT.postman_collection.json
+- Environment を「RoulettePT Local」に切り替え
+
+## Run order (spec-based)
+1. Auth/Register USER
+2. Auth/Register ADMIN
+3. Auth/Login USER (A1)
+4. Auth/Login ADMIN (A1)
+5. Spin/Spin normal (SP1-SP4)
+6. Spin/Spin duplicate idempotency (SP5)
+7. Points/Get my balance
+8. Admin/Force logout (F1)
+9. Auth/Refresh USER (R1) ※ForceLogout後の挙動は仕様書の期待に合わせて確認
+10. Auth/Logout USER (L1)
+
+## Notes
+- refresh_token は HttpOnly CookieのためPostmanのCookie jarで保持されます
+- refresh/logout は X-CSRF-Token と Origin が必須です
